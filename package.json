@@ -1,0 +1,29 @@
+{
+  "name": "component-docs-api",
+  "version": "1.0.0",
+  "description": "组件文档系统API服务",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node ./scripts/start.js",
+    "dev": "nodemon ./scripts/start.js",
+    "init-db": "node ./src/config/init-db.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "component",
+    "docs",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "mysql2": "^3.2.0",
+    "sequelize": "^6.30.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
