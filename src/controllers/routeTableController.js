@@ -58,9 +58,29 @@ class RouteTableController {
 
       // 读取Excel文件
       const workbook = XLSX.readFile(req.file.path);
+      
+      // 获取所有工作表
+      const allSheets = {};
+      let totalRows = 0;
+      
+      // 处理所有工作表
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const sheetData = XLSX.utils.sheet_to_json(worksheet);
+        allSheets[sheetName] = sheetData;
+        totalRows += sheetData.length;
+      });
+      
+      // 使用第一个工作表作为主要数据
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      // 保存所有工作表信息
+      const allSheetsInfo = JSON.stringify({
+        sheets: workbook.SheetNames,
+        data: allSheets
+      });
 
       // 创建路由表记录
       const routeTable = await RouteTable.create({
@@ -69,7 +89,8 @@ class RouteTableController {
         description,
         originalFileName: req.file.originalname,
         fileSize: req.file.size,
-        totalRows: jsonData.length
+        totalRows: totalRows,
+        allSheets: allSheetsInfo
       });
 
       // 解析并保存路由记录
@@ -84,12 +105,14 @@ class RouteTableController {
           return str;
         };
         
+        // 修改safeBoolean函数，保留原始值
         const safeBoolean = (value) => {
-          if (value === null || value === undefined || value === '') return false;
-          if (typeof value === 'boolean') return value;
-          const str = String(value).toLowerCase().trim();
-          return str === 'true' || str === '1' || str === 'yes';
+          if (value === null || value === undefined || value === '') return null;
+          return value; // 保留原始值，不做转换
         };
+
+        // 保存原始行数据
+        const rawData = JSON.stringify(row);
 
         return {
           tableId: routeTable.id,
@@ -113,7 +136,8 @@ class RouteTableController {
           moduleName: safeString(row['模块名称'], 200),
           model: safeString(row.model, 200),
           word: safeString(row.word), // TEXT类型，不限制长度
-          rowIndex: index + 2 // Excel行号从2开始（第1行是表头）
+          rowIndex: index + 2, // Excel行号从2开始（第1行是表头）
+          rawData: rawData // 存储原始数据
         };
       });
 
@@ -254,9 +278,29 @@ class RouteTableController {
 
       // 读取Excel文件
       const workbook = XLSX.readFile(req.file.path);
+      
+      // 获取所有工作表
+      const allSheets = {};
+      let totalRows = 0;
+      
+      // 处理所有工作表
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const sheetData = XLSX.utils.sheet_to_json(worksheet);
+        allSheets[sheetName] = sheetData;
+        totalRows += sheetData.length;
+      });
+      
+      // 使用第一个工作表作为主要数据
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      // 保存所有工作表信息
+      const allSheetsInfo = JSON.stringify({
+        sheets: workbook.SheetNames,
+        data: allSheets
+      });
 
       // 删除该表的所有现有记录
       await RouteRecord.destroy({
@@ -276,12 +320,14 @@ class RouteTableController {
           return str;
         };
         
+        // 修改safeBoolean函数，保留原始值
         const safeBoolean = (value) => {
-          if (value === null || value === undefined || value === '') return false;
-          if (typeof value === 'boolean') return value;
-          const str = String(value).toLowerCase().trim();
-          return str === 'true' || str === '1' || str === 'yes';
+          if (value === null || value === undefined || value === '') return null;
+          return value; // 保留原始值，不做转换
         };
+
+        // 保存原始行数据
+        const rawData = JSON.stringify(row);
 
         return {
           tableId: routeTable.id,
@@ -305,7 +351,8 @@ class RouteTableController {
           moduleName: safeString(row['模块名称'], 200),
           model: safeString(row.model, 200),
           word: safeString(row.word), // TEXT类型，不限制长度
-          rowIndex: index + 2 // Excel行号从2开始（第1行是表头）
+          rowIndex: index + 2, // Excel行号从2开始（第1行是表头）
+          rawData: rawData // 存储原始数据
         };
       });
 
@@ -315,7 +362,8 @@ class RouteTableController {
       await routeTable.update({
         originalFileName: req.file.originalname,
         fileSize: req.file.size,
-        totalRows: jsonData.length
+        totalRows: totalRows,
+        allSheets: allSheetsInfo
       });
 
       // 删除临时文件

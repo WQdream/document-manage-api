@@ -1,4 +1,4 @@
-const { RouteTable, RouteRecord, MigrationSession } = require('../models');
+const { RouteTable, RouteRecord, MigrationSession, Sequelize, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
 const path = require('path');
@@ -452,36 +452,133 @@ class MigrationController {
         order: [['rowIndex', 'ASC']]
       });
 
-      // 转换为Excel格式的数据
-      const excelData = records.map(record => ({
-        'id': record.routeId,
-        'parent_id': record.parentId,
-        'name': record.name,
-        'path': record.path,
-        'title': record.title,
-        'icon': record.icon,
-        'not_cache': record.notCache,
-        'hide_in_menu': record.hideInMenu,
-        'component': record.component,
-        'redirect': record.redirect,
-        'order': record.order,
-        'src': record.src,
-        'created_at': record.createdAt,
-        'updated_at': record.updatedAt,
-        'key_rule': record.keyRule,
-        'deleted_at': record.deletedAt,
-        'is_active': record.isActive,
-        'module_id': record.moduleId,
-        'nav': record.nav,
-        'type': record.type,
-        '模块名称': record.moduleName,
-        'model': record.model,
-        'word': record.word
-      }));
+      // 直接从记录中获取原始数据
+
+      // 处理数据，优先使用原始数据
+      let excelData = [];
+      
+      // 格式化日期函数
+      const formatDate = (date) => {
+        if (!date) return null;
+        return date.toISOString().replace('T', ' ').substring(0, 19);
+      };
+      
+      for (const record of records) {
+        try {
+          // 如果有原始数据，使用原始数据，但不包括时间字段
+          if (record.rawData) {
+            const rawData = JSON.parse(record.rawData);
+            // 删除原始数据中的时间字段，将使用数据库中的时间
+            delete rawData.created_at;
+            delete rawData.updated_at;
+            delete rawData.deleted_at;
+            
+            // 添加数据库中的时间字段
+            rawData.created_at = formatDate(record.createdAt);
+            rawData.updated_at = formatDate(record.updatedAt);
+            if (record.deletedAt) {
+              rawData.deleted_at = formatDate(record.deletedAt);
+            }
+            
+            excelData.push(rawData);
+          } else {
+            // 如果没有原始数据，使用转换后的数据
+            // 使用统一的日期格式化函数
+            const createdAt = formatDate(record.createdAt);
+            const updatedAt = formatDate(record.updatedAt);
+            const deletedAt = formatDate(record.deletedAt);
+            
+            excelData.push({
+              'id': record.routeId,
+              'parent_id': record.parentId,
+              'name': record.name,
+              'path': record.path,
+              'title': record.title,
+              'icon': record.icon,
+              'not_cache': record.notCache,
+              'hide_in_menu': record.hideInMenu,
+              'component': record.component,
+              'redirect': record.redirect,
+              'order': record.order,
+              'src': record.src,
+              'created_at': createdAt,
+              'updated_at': updatedAt,
+              'key_rule': record.keyRule,
+              'deleted_at': deletedAt,
+              'is_active': record.isActive,
+              'module_id': record.moduleId,
+              'nav': record.nav,
+              'type': record.type,
+              '模块名称': record.moduleName,
+              'model': record.model,
+              'word': record.word
+            });
+          }
+        } catch (e) {
+          console.error('解析原始数据失败:', e);
+          // 如果解析失败，使用转换后的数据
+          // 使用统一的日期格式化函数
+          const createdAt = formatDate(record.createdAt);
+          const updatedAt = formatDate(record.updatedAt);
+          const deletedAt = formatDate(record.deletedAt);
+          
+          excelData.push({
+            'id': record.routeId,
+            'parent_id': record.parentId,
+            'name': record.name,
+            'path': record.path,
+            'title': record.title,
+            'icon': record.icon,
+            'not_cache': record.notCache,
+            'hide_in_menu': record.hideInMenu,
+            'component': record.component,
+            'redirect': record.redirect,
+            'order': record.order,
+            'src': record.src,
+            'created_at': createdAt,
+            'updated_at': updatedAt,
+            'key_rule': record.keyRule,
+            'deleted_at': deletedAt,
+            'is_active': record.isActive,
+            'module_id': record.moduleId,
+            'nav': record.nav,
+            'type': record.type,
+            '模块名称': record.moduleName,
+            'model': record.model,
+            'word': record.word
+          });
+        }
+      }
 
       // 创建工作簿
       const workbook = XLSX.utils.book_new();
+      
+      // 将日期字段转为字符串，避免Excel自动转换
+      excelData.forEach(row => {
+        // 确保日期字段是字符串格式
+        if (row['created_at']) {
+          row['created_at'] = String(row['created_at']);
+        }
+        if (row['updated_at']) {
+          row['updated_at'] = String(row['updated_at']);
+        }
+        if (row['deleted_at']) {
+          row['deleted_at'] = String(row['deleted_at']);
+        }
+      });
+      
+      // 创建主工作表
       const worksheet = XLSX.utils.json_to_sheet(excelData);
+      
+      // 检查是否有多个工作表需要导出
+      let allSheetsData = null;
+      if (table.allSheets) {
+        try {
+          allSheetsData = JSON.parse(table.allSheets);
+        } catch (e) {
+          console.error('解析多工作表数据失败:', e);
+        }
+      }
       
       // 设置合适的列宽（wch单位约等于字符宽度）
       const columnWidths = [
@@ -522,7 +619,44 @@ class MigrationController {
         worksheet['!autofilter'] = { ref: worksheet['!ref'] };
       }
       
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Routes');
+      // 按照原始顺序添加所有工作表
+      if (allSheetsData && allSheetsData.sheets && allSheetsData.sheets.length > 0) {
+        // 处理第一个工作表（主工作表）
+        const firstSheetName = allSheetsData.sheets[0];
+        XLSX.utils.book_append_sheet(workbook, worksheet, firstSheetName);
+        
+        // 处理其他工作表
+        for (let i = 1; i < allSheetsData.sheets.length; i++) {
+          const sheetName = allSheetsData.sheets[i];
+          if (allSheetsData.data[sheetName] && Array.isArray(allSheetsData.data[sheetName])) {
+            // 处理日期格式
+            const sheetData = allSheetsData.data[sheetName].map(row => {
+              const newRow = {...row};
+              if (newRow['created_at']) newRow['created_at'] = String(newRow['created_at']);
+              if (newRow['updated_at']) newRow['updated_at'] = String(newRow['updated_at']);
+              if (newRow['deleted_at']) newRow['deleted_at'] = String(newRow['deleted_at']);
+              return newRow;
+            });
+            
+            // 创建工作表
+            const additionalWorksheet = XLSX.utils.json_to_sheet(sheetData);
+            // 为额外工作表设置统一较宽的列宽
+            try {
+              const rng = XLSX.utils.decode_range(additionalWorksheet['!ref'] || 'A1:A1');
+              const colsCount = Math.max(1, (rng.e.c - rng.s.c + 1));
+              const defaultWch = 20; // 统一宽一些
+              additionalWorksheet['!cols'] = Array.from({ length: colsCount }, () => ({ wch: defaultWch }));
+            } catch (e) {
+              // 忽略列宽计算异常，继续导出
+            }
+            // 添加到工作簿
+            XLSX.utils.book_append_sheet(workbook, additionalWorksheet, sheetName);
+          }
+        }
+      } else {
+        // 如果没有多工作表数据，使用默认名称
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Routes');
+      }
 
       // 生成文件名
       const fileName = `${table.name}_${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -534,8 +668,35 @@ class MigrationController {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
+      // 手动设置日期列的单元格格式为文本
+      const dateColumns = ['created_at', 'updated_at', 'deleted_at'];
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z1000');
+      
+      // 获取列名到列索引的映射
+      const headerRow = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0];
+      const columnMap = {};
+      headerRow.forEach((header, index) => {
+        columnMap[header] = index;
+      });
+      
+      // 设置日期列的格式为文本
+      dateColumns.forEach(colName => {
+        if (columnMap[colName] !== undefined) {
+          const colIndex = columnMap[colName];
+          for (let r = range.s.r + 1; r <= range.e.r; r++) {
+            const cellRef = XLSX.utils.encode_cell({ r, c: colIndex });
+            if (worksheet[cellRef]) {
+              worksheet[cellRef].t = 's'; // 设置为字符串类型
+            }
+          }
+        }
+      });
+      
       // 写入文件
-      XLSX.writeFile(workbook, filePath);
+      XLSX.writeFile(workbook, filePath, { 
+        bookSST: true,
+        type: 'file'
+      });
 
       // 设置响应头并发送文件
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

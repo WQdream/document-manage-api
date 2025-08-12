@@ -36,6 +36,10 @@ module.exports = (sequelize) => {
       defaultValue: 0,
       comment: '总行数'
     },
+    allSheets: {
+      type: DataTypes.TEXT('long'),
+      comment: '所有工作表的JSON数据'
+    },
     status: {
       type: DataTypes.ENUM('active', 'archived'),
       defaultValue: 'active',

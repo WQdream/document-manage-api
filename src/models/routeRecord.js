@@ -110,6 +110,10 @@ module.exports = (sequelize) => {
     rowIndex: {
       type: DataTypes.INTEGER,
       comment: 'Excel中的行号'
+    },
+    rawData: {
+      type: DataTypes.TEXT,
+      comment: '原始Excel数据的JSON字符串'
     }
   }, {
     tableName: 'route_records',
